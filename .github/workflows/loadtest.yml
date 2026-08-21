@@ -1,0 +1,71 @@
+name: load test playground
+
+# Every push runs both engines against a local HTTP target and publishes
+# the results as a job-summary table plus a zip artifact. This repo is the
+# live demo for Perfscale/github-action — see the README.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  native:
+    name: native step engine
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Start a local target
+        run: |
+          python3 -m http.server 18999 &
+          for _ in $(seq 1 20); do
+            curl -fs http://127.0.0.1:18999/ >/dev/null && break
+            sleep 0.5
+          done
+          curl -fs http://127.0.0.1:18999/ >/dev/null
+
+      - name: Run the load test
+        id: loadtest
+        uses: Perfscale/github-action@v1
+        with:
+          file: test.yaml
+          config: config.yaml
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: perfscale-output-native
+          path: ${{ steps.loadtest.outputs.output-file }}
+
+  jmeter:
+    name: jmeter engine
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Start a local target
+        run: |
+          python3 -m http.server 18999 &
+          for _ in $(seq 1 20); do
+            curl -fs http://127.0.0.1:18999/ >/dev/null && break
+            sleep 0.5
+          done
+          curl -fs http://127.0.0.1:18999/ >/dev/null
+
+      # Engine binaries are the workflow's responsibility; the action
+      # installs perfscale itself. Java is preinstalled on the runner.
+      - name: Install JMeter
+        run: |
+          curl -fsSL https://archive.apache.org/dist/jmeter/binaries/apache-jmeter-5.6.3.tgz \
+            | tar -xz -C "$RUNNER_TEMP"
+          echo "$RUNNER_TEMP/apache-jmeter-5.6.3/bin" >> "$GITHUB_PATH"
+
+      - name: Run the load test
+        id: loadtest
+        uses: Perfscale/github-action@v1
+        with:
+          jmeter: plan.jmx
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: perfscale-output-jmeter
+          path: ${{ steps.loadtest.outputs.output-file }}
